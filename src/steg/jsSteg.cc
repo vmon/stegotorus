@@ -333,12 +333,11 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
   char *jsStart, *jsEnd;
   int skip;
   int scriptLen;
-  int fin;
+  int fin = 0; //ust to pass the Werror of "may be" uninitialized
   unsigned int dlen2 = dlen;
   dp = data; 
   jtp = jTemplate; 
   jdp = jData;
-
 
   if (mode == CONTENT_JAVASCRIPT) {
     // assumption: the javascript pertaining to jTemplate has enough capacity

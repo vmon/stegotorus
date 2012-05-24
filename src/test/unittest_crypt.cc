@@ -968,6 +968,7 @@ test_crypt_rng(void *)
      An entropy test wouldn't really help either.
      I guess I'll just copy Tor's unit test methodology here :3 */
 
+
   uint8_t data1[100], data2[100];
 
   rng_bytes(data1, 100);

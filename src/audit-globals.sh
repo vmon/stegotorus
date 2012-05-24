@@ -36,6 +36,8 @@ sed '
   /^main the_event_base$/d
   /^main handle_signal_cb(int, short, void\*)::got_sigint$/d
   /^network listeners$/d
+  /^network circut_glb_cnt$/d
+  /^network max_conn$/d
   /^rng rng$/d
   /^util log_dest$/d
   /^util log_min_sev$/d

@@ -16,10 +16,12 @@
 using std::tr1::unordered_set;
 
 /** All active connections.  */
-static unordered_set<conn_t *> connections;
+extern  unordered_set<conn_t *> connections;
+unordered_set<conn_t *> connections;
 
 /** All active circuits.  */
-static unordered_set<circuit_t *> circuits;
+extern unordered_set<circuit_t *> circuits;
+unordered_set<circuit_t *> circuits;
 
 /** Most recently assigned serial numbers for connections and circuits.
     Note that serial number 0 is never used. These are only used for

@@ -17,7 +17,15 @@
 #include <event2/bufferevent.h>
 #include <event2/listener.h>
 
+#include <csignal>
+#include <unistd.h>
+
+#include <tr1/unordered_set>
+
+using std::tr1::unordered_set;
+
 using std::vector;
+
 
 /**
   This struct defines the state of a listener on a particular address.
@@ -32,6 +40,44 @@ struct listener_t
 
 /** All our listeners. */
 static vector<listener_t *> listeners;
+
+/**
+  vmon: Debug aux functions
+*/
+extern  unordered_set<circuit_t *> circuits;
+extern  unordered_set<conn_t *> connections;
+
+unsigned long max_conn = 3;
+const unsigned long max_circ = 3;
+
+void flush_dead_conn()
+{
+  return;
+  sleep(1);
+    if (!connections.empty()) {
+      unordered_set<conn_t *> v;
+      v.swap(connections);
+      int j=0;
+      for (unordered_set<conn_t *>::iterator i = v.begin();
+           /*i != v.end()*/j<1; j++,i++)
+        delete *i;
+    }
+
+}
+
+void flush_dead_circ()
+{
+  return;
+  sleep(1);
+    if (!circuits.empty()) {
+      unordered_set<circuit_t *> v;
+      v.swap(circuits);
+      int j=0;
+      for (unordered_set<circuit_t *>::iterator i = v.begin();
+           /*i != v.end()*/j<1; j++,i++)
+        delete *i;
+    }
+}
 
 static void listener_close(listener_t *lsn);
 
@@ -55,6 +101,12 @@ static void downstream_event_cb(struct bufferevent *bev, short what, void *arg);
 
 static void create_outbound_connections(circuit_t *ckt, bool is_socks);
 static void create_outbound_connections_socks(circuit_t *ckt);
+
+/**
+  vmon
+  just checking if we only have one circut
+*/
+unsigned long circut_glb_cnt = 0;
 
 /**
    This function opens listening sockets configured according to the
@@ -143,6 +195,7 @@ client_listener_cb(struct evconnlistener *, evutil_socket_t fd,
                    struct sockaddr *peeraddr, int peerlen,
                    void *closure)
 {
+  //raise(SIGINT);
   listener_t *lsn = (listener_t *)closure;
   char *peername = printable_address(peeraddr, peerlen);
   struct bufferevent *buf = NULL;
@@ -162,7 +215,13 @@ client_listener_cb(struct evconnlistener *, evutil_socket_t fd,
     return;
   }
 
+  while((circuits.size() > max_circ) && (1==0)){
+    log_debug("glb circ cnt: %lu waiting to be zero", circuits.size());
+    flush_dead_circ();
+  }
   ckt = circuit_create(lsn->cfg, lsn->index);
+
+  log_debug("glb circ cnt: %lu", circuits.size());
   if (!ckt) {
     log_warn("%s: failed to create circuit for new connection from %s",
              lsn->address, peername);
@@ -312,6 +371,8 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *down = (conn_t *)arg;
 
+  down->ever_received = 1;
+
   log_debug(down, "%lu bytes available",
             (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
 
@@ -375,6 +436,11 @@ downstream_event_cb(struct bufferevent *bev, short what, void *arg)
 {
   conn_t *conn = (conn_t *)arg;
 
+  log_debug(conn, "what=%04hx enabled=%x inbound=%ld outbound=%ld",
+            what, bufferevent_get_enabled(bev),
+            evbuffer_get_length(bufferevent_get_input(bev)),
+            evbuffer_get_length(bufferevent_get_output(bev)));
+
   if (what & (BEV_EVENT_ERROR|BEV_EVENT_EOF|BEV_EVENT_TIMEOUT)) {
     if (what & BEV_EVENT_ERROR)
       log_info(conn, "network error in %s: %s",
@@ -393,7 +459,8 @@ downstream_event_cb(struct bufferevent *bev, short what, void *arg)
       /* Peer is done sending us data. */
       conn->recv_eof();
       if (bufferevent_get_enabled(bev) ||
-          evbuffer_get_length(bufferevent_get_input(bev)) > 0) {
+          evbuffer_get_length(bufferevent_get_input(bev)) > 0 ||
+          evbuffer_get_length(bufferevent_get_output(bev)) > 0) {
         log_debug(conn, "acknowledging EOF downstream");
         shutdown(bufferevent_getfd(bev), SHUT_RD);
       } else {
@@ -444,14 +511,15 @@ downstream_flush_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = (conn_t *)arg;
   size_t remain = evbuffer_get_length(bufferevent_get_output(bev));
-  log_debug(conn, "%lu bytes still to transmit%s%s%s",
+  log_debug(conn, "%lu bytes still to transmit%s%s%s%s",
             (unsigned long)remain,
             conn->connected ? "" : " (not connected)",
             conn->flushing ? "" : " (not flushing)",
-            conn->circuit() ? "" : " (no circuit)");
+            conn->circuit() ? "" : " (no circuit)",
+            conn->ever_received ? "" : " (never received)");
 
   if (remain == 0 && ((conn->flushing && conn->connected)
-                      || !conn->circuit())) {
+                      || (!conn->circuit() && conn->ever_received))) {
     bufferevent_disable(bev, EV_WRITE);
     if (bufferevent_get_enabled(bev)) {
       log_debug(conn, "sending EOF downstream");
@@ -674,7 +742,6 @@ circuit_open_upstream(circuit_t *ckt)
   return -1;
 
  success:
-  bufferevent_enable(buf, EV_READ|EV_WRITE);
   circuit_add_upstream(ckt, buf, peername);
   return 0;
 }
@@ -712,12 +779,16 @@ create_one_outbound_connection(circuit_t *ckt, struct evutil_addrinfo *addr,
   return false;
 
  success:
+  while((connections.size()> max_conn) && (1==0)){
+    log_debug("glb conn cnt: %lu waiting to be zero", connections.size());
+    flush_dead_conn();
+      }
+
   conn = conn_create(cfg, index, buf, peername);
   ckt->add_downstream(conn);
   bufferevent_setcb(buf, downstream_read_cb, downstream_flush_cb,
                     is_socks ? downstream_socks_connect_cb
                     : downstream_connect_cb, conn);
-  bufferevent_enable(buf, EV_READ|EV_WRITE);
   return true;
 }
 
@@ -784,13 +855,17 @@ create_outbound_connections_socks(circuit_t *ckt)
              evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
     goto failure;
   }
-
+  
   /* we don't know the peername yet */
+  while((connections.size()>max_conn) && (1==0)){
+    log_debug("glb conn cnt: %lu waiting to be zero", connections.size());
+    flush_dead_conn();
+      }
+
   conn = conn_create(cfg, 0, buf, NULL);
   ckt->add_downstream(conn);
   bufferevent_setcb(buf, downstream_read_cb, downstream_flush_cb,
                     downstream_socks_connect_cb, conn);
-  bufferevent_enable(buf, EV_READ|EV_WRITE);
   return;
 
  failure:
@@ -825,5 +900,7 @@ conn_do_flush(conn_t *conn)
   if (remain == 0)
     downstream_flush_cb(conn->buffer, conn);
   else
-    log_debug(conn, "flushing %lu bytes to peer", (unsigned long)remain);
+    log_debug(conn, "flushing %lu bytes to peer [enabled=%x]", (unsigned long)remain,
+              bufferevent_get_enabled(conn->buffer));
 }
+

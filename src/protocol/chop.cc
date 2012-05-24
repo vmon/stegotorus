@@ -1158,7 +1158,7 @@ chop_conn_t::recv_handshake()
                       sizeof circuit_id) != sizeof circuit_id)
     return -1;
 
-  chop_circuit_table::value_type in(circuit_id, 0);
+  chop_circuit_table::value_type in(circuit_id, (chop_circuit_t *)0);
   std::pair<chop_circuit_table::iterator, bool> out
     = this->config->circuits.insert(in);
   chop_circuit_t *ck;
@@ -1262,6 +1262,22 @@ chop_conn_t::recv()
     log_debug(this, "receiving block %u <d=%lu p=%lu f=%02x>",
               hdr.seqno(), (unsigned long)hdr.dlen(), (unsigned long)hdr.plen(),
               (unsigned int)hdr.opcode());
+
+    // vmon: I think I need to evbuffer_copyout here!
+    if (hdr.dlen())
+      {
+        char* data_4_log =  new char[hdr.dlen() + 1];
+        /*if (evbuffer_copyout(decodebuf, (void*)data_4_log, hdr.dlen()) < 0)
+          {
+            log_warn(this, "failed to copy data to display in log");
+          }
+        */
+        memcpy(data_4_log, decodebuf, hdr.dlen());
+        data_4_log[hdr.dlen()] = '\n';
+        log_info("Data received: %s",  data_4_log);
+
+      }
+
 
     evbuffer *data = evbuffer_new();
     if (!data || (hdr.dlen() && evbuffer_add(data, decodebuf, hdr.dlen()))) {
