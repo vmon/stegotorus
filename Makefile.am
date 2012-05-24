@@ -9,7 +9,7 @@ AM_CPPFLAGS = -I. -I$(srcdir)/src -D_FORTIFY_SOURCE=2 $(lib_CPPFLAGS)
 LDADD       = libstegotorus.a
 
 noinst_LIBRARIES = libstegotorus.a
-noinst_PROGRAMS  = unittests tltester
+noinst_PROGRAMS  = unittests tltester tester_proxy
 bin_PROGRAMS     = stegotorus
 
 PROTOCOLS = \
@@ -85,6 +85,11 @@ EXTRA_DIST = doc \
 	src/test/itestlib.py \
 	src/test/test_socks.py \
 	src/test/test_tl.py
+
+#tester_proxy_CPPFLAGS = $(libevent_openssl_CPPFLAGS) $(libssl_CPPFLAGS)
+tester_proxy_LDADD = $(libevent_openssl_LIBS) $(libssl_LIBS)
+
+tester_proxy_SOURCES = src/test/tester_proxy/tester_proxy.cc
 
 # Generated source files
 CLEANFILES = protolist.cc steglist.cc unitgrplist.cc \

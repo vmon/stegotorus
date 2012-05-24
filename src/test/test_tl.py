@@ -10,7 +10,7 @@ import os
 import os.path
 
 from unittest import TestCase, TestSuite
-from itestlib import Stegotorus, Tltester, diff
+from itestlib import Stegotorus, Tltester, TesterProxy, diff
 
 class TimelineTest(object):
 
@@ -41,42 +41,56 @@ class TimelineTest(object):
         if errors != "":
             self.fail("\n" + errors)
 
-    def test_null(self):
-        self.doTest("null",
-           ("null", "server", "127.0.0.1:5000", "127.0.0.1:5001",
-            "null", "client", "127.0.0.1:4999", "127.0.0.1:5000"))
+    def doProxyTest(self, label, proxy_args, st_args):
+        """
+        It runs a proxy with proxy_args and then call doTest
 
-    def test_chop_nosteg(self):
-        self.doTest("chop",
-           ("chop", "server", "127.0.0.1:5001",
-            "127.0.0.1:5010","nosteg",
-            "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","nosteg",
-            ))
+        INPUT:
+           - ``label``: The test title
+           - ``proxy_args``: arguments to be passed to the test proxy
+           - ``st_args``: arguments to be passed to Stegotorus
+        """
+        test_proxy = TesterProxy(proxy_args)
 
-    def test_chop_null2(self):
-        self.doTest("chop",
-           ("chop", "server", "127.0.0.1:5001",
-            "127.0.0.1:5010","nosteg","127.0.0.1:5011","nosteg",
-            "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","nosteg","127.0.0.1:5011","nosteg",
-            ))
+        self.doTest(label, st_args)
 
-    def test_chop_nosteg_rr(self):
-        self.doTest("chop",
-           ("chop", "server", "127.0.0.1:5001",
-            "127.0.0.1:5010","nosteg_rr",
-            "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","nosteg_rr",
-            ))
 
-    def test_chop_nosteg_rr2(self):
-        self.doTest("chop",
-           ("chop", "server", "127.0.0.1:5001",
-            "127.0.0.1:5010","nosteg_rr","127.0.0.1:5011","nosteg_rr",
-            "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","nosteg_rr","127.0.0.1:5011","nosteg_rr",
-            ))
+    # def test_null(self):
+    #     self.doTest("null",
+    #        ("null", "server", "127.0.0.1:5000", "127.0.0.1:5001",
+    #         "null", "client", "127.0.0.1:4999", "127.0.0.1:5000"))
+
+    # def test_chop_nosteg(self):
+    #     self.doTest("chop",
+    #        ("chop", "server", "127.0.0.1:5001",
+    #         "127.0.0.1:5010","nosteg",
+    #         "chop", "client", "127.0.0.1:4999",
+    #         "127.0.0.1:5010","nosteg",
+    #         ))
+
+    # def test_chop_null2(self):
+    #     self.doTest("chop",
+    #        ("chop", "server", "127.0.0.1:5001",
+    #         "127.0.0.1:5010","nosteg","127.0.0.1:5011","nosteg",
+    #         "chop", "client", "127.0.0.1:4999",
+    #         "127.0.0.1:5010","nosteg","127.0.0.1:5011","nosteg",
+    #         ))
+
+    # def test_chop_nosteg_rr(self):
+    #     self.doTest("chop",
+    #        ("chop", "server", "127.0.0.1:5001",
+    #         "127.0.0.1:5010","nosteg_rr",
+    #         "chop", "client", "127.0.0.1:4999",
+    #         "127.0.0.1:5010","nosteg_rr",
+    #         ))
+
+    # def test_chop_nosteg_rr2(self):
+    #     self.doTest("chop",
+    #        ("chop", "server", "127.0.0.1:5001",
+    #         "127.0.0.1:5010","nosteg_rr","127.0.0.1:5011","nosteg_rr",
+    #         "chop", "client", "127.0.0.1:4999",
+    #         "127.0.0.1:5010","nosteg_rr","127.0.0.1:5011","nosteg_rr",
+    #         ))
 
     # buggy, disabled
     #def test_embed(self):
@@ -87,12 +101,21 @@ class TimelineTest(object):
     #        "127.0.0.1:5010","embed",
     #        ))
 
-    def test_http(self):
-        self.doTest("chop",
+    # def test_http(self):
+    #     self.doTest("chop",
+    #        ("chop", "server", "127.0.0.1:5001",
+    #         "127.0.0.1:5010","http","127.0.0.1:5011","http",
+    #         "chop", "client", "127.0.0.1:4999",
+    #         "127.0.0.1:5010","http","127.0.0.1:5011","http",
+    #         ))
+
+    def test_http_simple_proxy(self):
+        self.doProxyTest("chop", 
+           ("127.0.0.1:8080", "127.0.0.1:5010"),
            ("chop", "server", "127.0.0.1:5001",
             "127.0.0.1:5010","http","127.0.0.1:5011","http",
             "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","http","127.0.0.1:5011","http",
+            "127.0.0.1:8080","http","127.0.0.1:5011","http",
             ))
 
 # Synthesize TimelineTest+TestCase subclasses for every 'tl_*' file in
@@ -100,6 +123,8 @@ class TimelineTest(object):
 def load_tests(loader, standard_tests, pattern):
     suite = TestSuite()
     testdir = os.path.dirname(__file__)
+
+    testdir = (testdir == '') and '.' or testdir
 
     for f in sorted(os.listdir(testdir)):
         if f.startswith('tl_'):
