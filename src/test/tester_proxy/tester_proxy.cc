@@ -84,6 +84,7 @@ drained_writecb(struct bufferevent *bev, void *ctx)
 		bufferevent_enable(partner, EV_READ);
 }
 
+/* not going to use this guy!
 static void
 close_on_finished_writecb(struct bufferevent *bev, void *ctx)
 {
@@ -94,11 +95,13 @@ close_on_finished_writecb(struct bufferevent *bev, void *ctx)
 		bufferevent_free(bev);
 	}
 }
+*/
 
 static void
 eventcb(struct bufferevent *bev, short what, void *ctx)
 {
         struct bufferevent *partner = (bufferevent *)ctx;
+        bool reading = (what & BEV_EVENT_READING);
 
 	if (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
 		if (what & BEV_EVENT_ERROR) {
@@ -118,25 +121,64 @@ eventcb(struct bufferevent *bev, short what, void *ctx)
 		}
 
 		if (partner) {
+                  if (reading) {
 			/* Flush all pending data */
 			readcb(bev, ctx);
+                          
+                        evutil_socket_t fd = bufferevent_getfd(bev);
+                        bufferevent_disable(bev, EV_READ);
+                        if (fd != -1)
+                          if (shutdown(fd, SHUT_RD) &&
+                              EVUTIL_SOCKET_ERROR() != ENOTCONN) {
+                            fprintf(stderr, "Error in closing buffer: %s\n",
+                                   evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+                          }
 
-			if (evbuffer_get_length(
-				    bufferevent_get_output(partner))) {
-				/* We still have to flush data from the other
-				 * side, but when that's done, close the other
-				 * side. */
-				bufferevent_setcb(partner,
-				    NULL, close_on_finished_writecb,
-				    eventcb, NULL);
-				bufferevent_disable(partner, EV_READ);
-			} else {
-				/* We have nothing left to say to the other
-				 * side; close it. */
-				bufferevent_free(partner);
-			}
-		}
-		bufferevent_free(bev);
+                        /*When we are not going to read in bev
+                          we are also not going to write in partner any more
+                        */
+                        fd = bufferevent_getfd(partner);
+                        bufferevent_disable(partner, EV_WRITE);
+                        if (fd != -1)
+                          if (shutdown(fd, SHUT_WR) &&
+                              EVUTIL_SOCKET_ERROR() != ENOTCONN) {
+                            fprintf(stderr, "Error closing buffer: %s\n",
+                                    evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+                          }
+                  
+
+                  }        
+                  
+                  //else 
+                    /* we are saying EOF while writing this means we are 
+                          not going to write anymore.
+                       */
+                 //{
+                      
+
+                        /* We should not close the partner ability to read,
+                           because EOF here only means that partner is telling
+                           us that it is not going to WRITE anymore.
+                        */
+                         
+			// if (evbuffer_get_length(
+			// 	    bufferevent_get_output(partner))) {
+			// 	/* We still have to flush data from the other
+			// 	 * side, but when that's done, close the other
+			// 	 * side. */
+			// 	bufferevent_setcb(partner,
+			// 	    NULL, close_on_finished_writecb,
+			// 	    eventcb, NULL);
+			// 	bufferevent_disable(partner, EV_READ);
+			// } else {
+			// 	/* We have nothing left to say to the other
+			// 	 * side; close it. */
+			// 	bufferevent_free(partner);
+			// }
+                  //}
+                }
+                else //there's no partner, so don't warry destroy everything
+                  bufferevent_free(bev);
 	}
 }
 
@@ -276,6 +318,11 @@ main(int argc, char **argv)
 	listener = evconnlistener_new_bind(base, accept_cb, NULL,
 	    LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE,
 	    -1, (struct sockaddr*)&listen_on_addr, socklen);
+
+	if (!listener) {
+		perror("evconnlistener_new_bind(): probably somebody already is listening on the same port");
+		return 1;
+	}
 
 	event_base_dispatch(base);
 
