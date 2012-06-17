@@ -13,6 +13,8 @@
 */.dirstamp
 */*/.deps/
 */*/.dirstamp
+.deps/
+.dirstamp
 
 /aclocal.m4
 /autom4te.cache
@@ -39,8 +41,15 @@
 /stegotorus
 /tltester
 /unittests
+/tester_proxy
+/stegotorus_c
 
 /build/
 /build-*/
 /bench/
 /bench-*/
+
+/*.el
+/brkpnt*
+/gdb*
+/commandline-args.txt
