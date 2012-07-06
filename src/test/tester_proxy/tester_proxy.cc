@@ -1,3 +1,4 @@
+
 /*
   This example code shows how to write an (optionally encrypting) SSL proxy
   with Libevent's bufferevent layer.
@@ -52,6 +53,11 @@ readcb(struct bufferevent *bev, void *ctx)
         (void)ctx; //to avoid Werror: unused
         src = bufferevent_get_input(bev);
 	len = evbuffer_get_length(src);
+        
+        char* debug_buf = new char[len];
+        evbuffer_copyout(bufferevent_get_input(bev), (void*) debug_buf, sizeof(char)* len);
+        fprintf(stderr, "Received: %s", debug_buf);
+
 	if (!partner) {
 		evbuffer_drain(src, len);
 		return;
